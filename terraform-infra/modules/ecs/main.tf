@@ -1,16 +1,6 @@
-# Service Discovery namespace for Service Connect
-resource "aws_service_discovery_http_namespace" "this" {
-  name = var.name
-  tags = var.tags
-}
-
 resource "aws_ecs_cluster" "this" {
   name = var.name
   tags = var.tags
-
-  service_connect_defaults {
-    namespace = aws_service_discovery_http_namespace.this.arn
-  }
 }
 
 resource "aws_lb" "this" {
@@ -149,25 +139,31 @@ resource "aws_iam_role" "task_roles" {
   tags = var.tags
 }
 
-locals {
-  service_policy_attachments = {
-    for attachment in flatten([
+# Create policy attachments for each service's task policies
+resource "aws_iam_role_policy_attachment" "task_roles" {
+  for_each = {
+    for idx, attachment in flatten([
       for service_key, service in var.services :
       [
-        for policy_arn in service.task_policy_arns : {
+        for policy_idx, policy_arn in service.task_policy_arns : {
           service_key = service_key
           policy_arn  = policy_arn
+          key         = "${service_key}-${policy_idx}"
         }
       ]
-    ]) : "${attachment.service_key}-${basename(attachment.policy_arn)}" => attachment
+    ]) : attachment.key => attachment
   }
-}
-
-resource "aws_iam_role_policy_attachment" "task_roles" {
-  for_each = local.service_policy_attachments
 
   role       = aws_iam_role.task_roles[each.value.service_key].name
   policy_arn = each.value.policy_arn
+}
+
+# Attach SSM permissions required for ECS Exec to all task roles
+resource "aws_iam_role_policy_attachment" "task_roles_ssm" {
+  for_each = aws_iam_role.task_roles
+
+  role       = each.value.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
 resource "aws_ecs_task_definition" "this" {
@@ -189,7 +185,7 @@ resource "aws_ecs_task_definition" "this" {
     essential = true
     portMappings = [
       {
-        name          = each.key == "backend" ? "backend" : null
+        name          = each.key == "backend" ? "backend" : each.key
         containerPort = each.value.container_port
         hostPort      = each.value.container_port
         protocol      = "tcp"
@@ -206,9 +202,9 @@ resource "aws_ecs_task_definition" "this" {
   })
 }
 
-# Only create target group for frontend (backend accessed via Service Connect)
+# Create target groups for both frontend and backend
 resource "aws_lb_target_group" "this" {
-  for_each = { for k, v in var.services : k => v if k == "frontend" }
+  for_each = var.services
 
   name        = "${var.name}-${each.key}-tg"
   port        = each.value.container_port
@@ -227,8 +223,24 @@ resource "aws_lb_target_group" "this" {
   tags = var.tags
 }
 
-# Frontend listener rule - all traffic goes to frontend
-# Frontend will proxy /api/* requests to backend via Service Connect
+# Backend listener rule - /api/* requests go to backend
+resource "aws_lb_listener_rule" "backend" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 50
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.this["backend"].arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
+    }
+  }
+}
+
+# Frontend listener rule - all other traffic goes to frontend
 resource "aws_lb_listener_rule" "frontend" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 100
@@ -253,6 +265,13 @@ resource "aws_ecs_service" "this" {
   task_definition = aws_ecs_task_definition.this[each.key].arn
   desired_count   = 1
   launch_type     = "FARGATE"
+  enable_execute_command = true
+  force_new_deployment = true
+
+  # Force service update when build version changes
+  triggers = {
+    build_version = var.build_version
+  }
 
   network_configuration {
     subnets          = each.value.is_public ? var.public_subnet_ids : var.private_subnet_ids
@@ -260,33 +279,13 @@ resource "aws_ecs_service" "this" {
     assign_public_ip = each.value.is_public
   }
 
-  # Service Connect configuration
-  service_connect_configuration {
-    enabled = true
-    
-    # Backend service provides an endpoint for other services to connect to
-    dynamic "service" {
-      for_each = each.key == "backend" ? [1] : []
-      content {
-        port_name      = "backend"
-        discovery_name = "backend"
-        
-        client_alias {
-          port     = each.value.container_port
-          dns_name = "backend"
-        }
-      }
-    }
-  }
 
-  # Only attach load balancer to frontend service (backend will be accessed via Service Connect)
-  dynamic "load_balancer" {
-    for_each = each.key == "frontend" ? [1] : []
-    content {
-      target_group_arn = aws_lb_target_group.this[each.key].arn
-      container_name   = each.key
-      container_port   = each.value.container_port
-    }
+
+  # Attach load balancer to both frontend and backend services
+  load_balancer {
+    target_group_arn = aws_lb_target_group.this[each.key].arn
+    container_name   = each.key
+    container_port   = each.value.container_port
   }
 
   tags = var.tags

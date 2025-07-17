@@ -1,6 +1,6 @@
 locals {
   # Increment to force Docker rebuild/push even if source unchanged
-  build_version = 6
+  build_version = 11
 
   # Map of services to build; paths are relative to repository root
   services = {
@@ -26,17 +26,14 @@ locals {
       cpu            = 256
       memory         = 512
       is_public      = true
-      environment = {
-        # Backend URL for nginx proxy_pass via Service Connect
-        BACKEND_URL = "http://backend:4000"
-      }
+      environment    = {}
     }
     backend = {
       repository_url   = "${module.ecr_docker_images.repository_urls["backend"]}:${local.build_version}"
       container_port   = 4000
       cpu              = 256
       memory           = 512
-      is_public        = false
+      is_public        = true
       task_policy_arns = [module.secrets.read_secrets_policy_arn]
     }
   }
