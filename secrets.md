@@ -13,7 +13,6 @@ The implementation lives in the existing `terraform-infra` codebase as a reusabl
 Each secret value is injected with an environment variable that Terraform automatically maps to a variable because of the `TF_VAR_` prefix. Example for your shell:
 ```bash
 export TF_VAR_openai_api_key="<OPENAI_KEY>"
-export TF_VAR_backend_db_url="<POSTGRES_URL>"
 ```
 Nothing is committed to VCS; all sensitive values stay in your local environment or in a CI secret store.
 
@@ -25,11 +24,7 @@ variable "openai_api_key" {
   description = "OpenAI API key used by the backend service"
 }
 
-variable "backend_db_url" {
-  type        = string
-  sensitive   = true
-  description = "Database DSN for the backend service"
-}
+
 ```
 
 A convenience local consolidates all secrets into a map that will be passed to the module:
@@ -37,7 +32,6 @@ A convenience local consolidates all secrets into a map that will be passed to t
 locals {
   secrets = {
     openai_api_key = var.openai_api_key
-    backend_db_url = var.backend_db_url
   }
 }
 ```
@@ -78,7 +72,10 @@ data "aws_iam_policy_document" "read" {
   statement {
     actions   = [
       "secretsmanager:GetSecretValue",
-      "secretsmanager:DescribeSecret"
+      "secretsmanager:DescribeSecret",
+      # AWS Config read permissions for backend API
+      "config:DescribeConfigRules",
+      "config:GetComplianceDetailsByConfigRule"
     ]
     resources = [for s in aws_secretsmanager_secret.this : s.arn]
   }

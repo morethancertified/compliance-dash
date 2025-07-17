@@ -4,11 +4,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const client = new ConfigServiceClient({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  },
+  // Region can come from environment or IMDS; fallback to us-east-1
+  region: process.env.AWS_REGION || "us-east-1",
+  // Do not explicitly pass credentials; rely on default provider chain (ECS task role, etc.)
 });
 
 export async function listConfigRules(nextToken?: string) {
