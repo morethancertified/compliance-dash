@@ -30,15 +30,35 @@ resource "docker_image" "this" {
   for_each = var.services
   name = "${aws_ecr_repository.this[each.key].repository_url}:${local.tag}"
   build {
-    context    = each.value.context
-    dockerfile = each.value.dockerfile
+    context    = var.services[each.key].context
+    dockerfile = var.services[each.key].dockerfile
+    tag        = [
+      "${aws_ecr_repository.this[each.key].repository_url}:${local.tag}",
+      "${aws_ecr_repository.this[each.key].repository_url}:latest"
+    ]
   }
 }
 
-resource "docker_registry_image" "push" {
+resource "docker_registry_image" "push_versioned" {
   for_each = var.services
-  name          = docker_image.this[each.key].name
+  name          = "${aws_ecr_repository.this[each.key].repository_url}:${local.tag}"
   keep_remotely = true
+
+  depends_on = [docker_image.this]
+}
+
+resource "docker_registry_image" "push_latest" {
+  for_each = var.services
+  name          = "${aws_ecr_repository.this[each.key].repository_url}:latest"
+  keep_remotely = true
+
+  # Force recreation when build version changes
+  triggers = {
+    build_version = var.tag_suffix
+    image_id = docker_image.this[each.key].image_id
+  }
+
+  depends_on = [docker_image.this]
 }
 
 output "repository_urls" {
