@@ -56,6 +56,20 @@ module "ecs" {
   build_version = local.build_version
 }
 
+module "aws_config" {
+  source = "./modules/aws_config"
+
+  name         = "compliance-dash"
+  tags         = {
+    Project = "compliance-dash"
+  }
+  config_rules = local.config_rules
+  
+  # Set to false since you already have existing Config setup
+  create_config_recorder  = false
+  create_delivery_channel = false
+}
+
 output "repository_urls" {
   description = "Map of service name to ECR repository URL"
   value       = module.ecr_docker_images.repository_urls
@@ -64,4 +78,14 @@ output "repository_urls" {
 output "load_balancer_url" {
   description = "The URL of the load balancer"
   value       = "http://${module.ecs.lb_dns_name}"
+}
+
+output "config_bucket_name" {
+  description = "Name of the S3 bucket used for AWS Config"
+  value       = module.aws_config.config_bucket_name
+}
+
+output "config_rules" {
+  description = "List of created AWS Config rule names"
+  value       = module.aws_config.config_rule_names
 }
