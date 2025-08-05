@@ -44,5 +44,20 @@ locals {
       owner             = "AWS"
       source_identifier = "S3_BUCKET_LOGGING_ENABLED"
     }
+    # NIST 800-171 3.13.1 - Monitor, control, and protect organizational communications
+    s3-bucket-ssl-requests-only = {
+      owner             = "AWS"
+      source_identifier = "S3_BUCKET_SSL_REQUESTS_ONLY"
+    }
+    # NIST 800-171 3.13.11 - Employ cryptographic mechanisms to prevent unauthorized disclosure
+    s3-bucket-server-side-encryption-enabled = {
+      owner             = "AWS"
+      source_identifier = "S3_BUCKET_SERVER_SIDE_ENCRYPTION_ENABLED"
+    }
+    # NIST 800-171 3.1.1 - Limit information system access to authorized users
+    s3-bucket-public-read-prohibited = {
+      owner             = "AWS"
+      source_identifier = "S3_BUCKET_PUBLIC_READ_PROHIBITED"
+    }
   }
 }

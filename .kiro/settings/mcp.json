@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server"
+      ],
+      "disabled": false,
+      "autoApprove": [
+        "searchModules",
+        "resolveProviderDocID",
+        "resolveProviderDocID",
+        "getProviderDocs"
+      ]
+    }
+  }
+}
